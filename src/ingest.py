@@ -31,7 +31,7 @@ class WeatherDataPoint:
     wind_speed: float
     wind_direction: int
     cloudiness: int
-    visibility: int
+    visibility: float
     lat: float
     lon: float
 
