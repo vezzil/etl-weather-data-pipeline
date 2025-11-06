@@ -1,0 +1,82 @@
+[
+  {
+    "city": "London",
+    "country_code": "GB"
+  },
+  {
+    "city": "New York",
+    "country_code": "US"
+  },
+  {
+    "city": "Tokyo",
+    "country_code": "JP"
+  },
+  {
+    "city": "Sydney",
+    "country_code": "AU"
+  },
+  {
+    "city": "Berlin",
+    "country_code": "DE"
+  },
+  {
+    "city": "Paris",
+    "country_code": "FR"
+  },
+  {
+    "city": "Mumbai",
+    "country_code": "IN"
+  },
+  {
+    "city": "São Paulo",
+    "country_code": "BR"
+  },
+  {
+    "city": "Cairo",
+    "country_code": "EG"
+  },
+  {
+    "city": "Toronto",
+    "country_code": "CA"
+  },
+  {
+    "city": "Moscow",
+    "country_code": "RU"
+  },
+  {
+    "city": "Beijing",
+    "country_code": "CN"
+  },
+  {
+    "city": "Mexico City",
+    "country_code": "MX"
+  },
+  {
+    "city": "Lagos",
+    "country_code": "NG"
+  },
+  {
+    "city": "Istanbul",
+    "country_code": "TR"
+  },
+  {
+    "city": "Buenos Aires",
+    "country_code": "AR"
+  },
+  {
+    "city": "Jakarta",
+    "country_code": "ID"
+  },
+  {
+    "city": "Seoul",
+    "country_code": "KR"
+  },
+  {
+    "city": "Dubai",
+    "country_code": "AE"
+  },
+  {
+    "city": "Singapore",
+    "country_code": "SG"
+  }
+]
