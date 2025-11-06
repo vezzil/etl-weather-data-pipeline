@@ -1,0 +1,228 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: weather_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: weather_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - weather_network
+
+  # Redis (for Airflow)
+  redis:
+    image: redis:7-alpine
+    container_name: weather_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - weather_network
+
+  # Airflow Webserver
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: weather_airflow_webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow_db
+      - AIRFLOW__CELERY__RESULT_BACKEND=redis://redis:6379/0
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AIRFLOW__SMTP__SMTP_HOST=smtp.gmail.com
+      - AIRFLOW__SMTP__SMTP_PORT=587
+      - AIRFLOW__SMTP__SMTP_STARTTLS=true
+      - AIRFLOW__SMTP__SMTP_SSL=false
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin123
+    volumes:
+      - ./airflow_dag:/opt/airflow/dags
+      - ./src:/opt/airflow/dags/src
+      - ./config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - ./logs:/opt/airflow/logs
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin123 &&
+        airflow webserver
+      "
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - weather_network
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: weather_airflow_scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow_db
+      - AIRFLOW__CELERY__RESULT_BACKEND=redis://redis:6379/0
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+    volumes:
+      - ./airflow_dag:/opt/airflow/dags
+      - ./src:/opt/airflow/dags/src
+      - ./config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - ./logs:/opt/airflow/logs
+      - airflow_logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      airflow-webserver:
+        condition: service_healthy
+    command: airflow scheduler
+    networks:
+      - weather_network
+
+  # Airflow Worker
+  airflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: weather_airflow_worker
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow_db
+      - AIRFLOW__CELERY__RESULT_BACKEND=redis://redis:6379/0
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+    volumes:
+      - ./airflow_dag:/opt/airflow/dags
+      - ./src:/opt/airflow/dags/src
+      - ./config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - ./logs:/opt/airflow/logs
+      - airflow_logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      airflow-webserver:
+        condition: service_healthy
+    command: airflow celery worker
+    networks:
+      - weather_network
+
+  # ETL Development Environment
+  etl-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: weather_etl_dev
+    environment:
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - DB_TYPE=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=weather_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./tests:/app/tests
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app
+    command: tail -f /dev/null  # Keep container running
+    networks:
+      - weather_network
+
+  # Jupyter Notebook for Analysis
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    container_name: weather_jupyter
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - DB_TYPE=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=weather_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    volumes:
+      - ./notebooks:/home/jovyan/work/notebooks
+      - ./src:/home/jovyan/work/src
+      - ./data:/home/jovyan/work/data
+      - ./config:/home/jovyan/work/config
+    ports:
+      - "8888:8888"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - weather_network
+
+  # PgAdmin for Database Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: weather_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - weather_network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  airflow_logs:
+
+networks:
+  weather_network:
+    driver: bridge
